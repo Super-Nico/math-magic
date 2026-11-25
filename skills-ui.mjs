@@ -1,4 +1,4 @@
-import {catalog,makeLesson,prompt,formula,cards,transform,finishedOperation,progress} from './strategy.mjs'
+import {catalog,makeLesson,prompt,formula,cards,transform,finishedOperation,progress,lessonReview} from './strategy.mjs'
 import {value} from './engine.mjs'
 
 // 配对以外的策略，让儿童直接填写或选择发生变化的数学对象。
@@ -75,8 +75,15 @@ export function skillPage(app,db,save,skill,hub=false){
   const panel=app.querySelector('#lesson')
   if(!lesson||lesson.advanced===3){
    panel.innerHTML=(lesson?'<h2>本轮完成</h2><p>独立变式答对 '+lesson.answers.slice(1).filter((n,i)=>n===value(lesson.questions[i+1])).length+' / 2 题</p>':'')+'<p>先自己算，再动手试，最后练两道变式。</p><p>需要会'+({乘除:'乘法口诀',数感:'识别十位和个位',加减:'整数加减',策略:skill==='order'?'加法和乘法':'整数加减'}[group])+' · '+p.state+' · 已答 '+p.count+' 题</p><button id="startLesson">开始练习</button>'
+   const schedule=lessonReview(db.lessons??[],skill)
+   if(schedule?.ready)panel.querySelector('#startLesson').textContent='开始复习'
    const create=()=>{
-    lesson=makeLesson(skill,crypto.getRandomValues(new Uint32Array(1))[0])
+    const seed=crypto.getRandomValues(new Uint32Array(1))[0],previous=new Set(lesson?.questions.map(formula))
+    for(let offset=0;offset<32;offset++){
+     const next=makeLesson(skill,(seed+offset)>>>0)
+     if(next.questions.every(q=>!previous.has(formula(q)))){lesson=next;break}
+    }
+    lesson.startedAt=Date.now()
     ;(db.lessons??=[]).push(lesson)
    }
    panel.querySelector('#startLesson').onclick=()=>{create();save();render()}
@@ -119,7 +126,7 @@ export function skillPage(app,db,save,skill,hub=false){
    panel.querySelector('#operands').append(b)
   })
   for(const id of ['undo','reset']){const b=panel.querySelector('#'+id);b.disabled=!board.steps.length;b.onclick=()=>{board.steps.splice(id==='reset'?0:-1);save();render()}}
-  panel.querySelector('#advance').onclick=()=>{lesson.advanced++;save();render()}
+  panel.querySelector('#advance').onclick=()=>{lesson.advanced++;if(lesson.advanced===3)lesson.completedAt=Date.now();save();render()}
  }
  render()
 }

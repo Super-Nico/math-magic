@@ -20,8 +20,8 @@ export function features(t){
  if(op==='+'||op==='-'){let x=a,y=b,carry=0;while(x||y){const digit=x%10,other=y%10;carry=op==='+'?Number(digit+other+carry>=10):Number(digit-other-carry<0);if(carry)tags.push(op==='+'?'add.carry':'sub.borrow');x=Math.floor(x/10);y=Math.floor(y/10)}}
  return [...new Set(tags)]
 }
-export function validConfig(c){
- return !!c && !(!['classic','flash'].includes(c.mode)||!Object.hasOwn(skills,c.kind)||![10,13,99,999].includes(c.range)||!Number.isInteger(c.count)||c.count<2||c.count>10||![5,6,10,15,20].includes(c.length)||![500,1000,1500,2000,3000].includes(c.speed)||![0,200,500].includes(c.gap)||c.mode==='flash'&&!['add','sub'].includes(c.kind))
+export function validConfig(c,single=false){
+ return !!c && !(!['classic','flash'].includes(c.mode)||!Object.hasOwn(skills,c.kind)||![10,13,99,999].includes(c.range)||!Number.isInteger(c.count)||c.count<2||c.count>10||!(single?c.length===1:[5,6,10,15,20].includes(c.length))||![500,1000,1500,2000,3000].includes(c.speed)||![0,200,500].includes(c.gap)||c.mode==='flash'&&!['add','sub'].includes(c.kind))
 }
 export const games=Object.freeze(Object.fromEntries(
  [['classic','经典翻牌'],['flash','闪电心算']].map(([mode,title])=>[mode,Object.freeze({
@@ -38,13 +38,13 @@ export const games=Object.freeze(Object.fromEntries(
   explain
  })])
 ))
-export function generate(c,seed,exclude=[],pattern=null){
- if(!validConfig(c))throw Error('设置组合不可用')
+export function generate(c,seed,exclude=[],pattern=null,reviewFeatures=null){
+ if(!validConfig(c,reviewFeatures!==null&&c.length===1))throw Error('设置组合不可用')
  const r=rng(seed),lo=c.range===999?100:c.range===99?10:1,pick=(a,b)=>a+Math.floor(r()*(b-a+1))
  const used=new Set(exclude),items=[]
  for(let i=0;i<c.length;i++){
  let found=false
- for(let attempt=0;attempt<100&&!found;attempt++){
+ for(let attempt=0;attempt<(reviewFeatures===null?100:1200)&&!found;attempt++){
  let tree=pick(lo,c.range),total=tree
  for(let j=1;j<c.count;j++){
  let op={add:'+',sub:r()<0.55?'-':'+',mul:'*',div:'/',mixed:['+','-','*','/'][pick(0,3)]}[c.kind],n=pick(lo,c.range)
@@ -57,11 +57,26 @@ export function generate(c,seed,exclude=[],pattern=null){
  }
  if(!tree)continue
  const parts=tokens(tree),key=c.kind==='add'?parts.filter(Number.isInteger).sort((a,b)=>a-b).join(','):JSON.stringify(tree)
- if(used.has(key))continue
+ if(used.has(key)||reviewFeatures!==null&&features(tree).slice().sort().join()!==reviewFeatures.slice().sort().join())continue
  used.add(key);items.push({tree,cards:parts.filter(Number.isInteger).map((n,j)=>({id:'c'+j,value:n,suit:c.range<=13?['spade','heart','club','diamond'][j%4]:null})),templateId:c.mode+'.'+c.kind,answer:total,key,features:features(tree),explanation:explain({tree,answer:total}),skill:c.mode==='flash'?'memory.accumulate':skills[c.kind],version:1});found=true
  }
  if(!found)throw Error('这个范围内无法生成足够多的不同题目，请减少牌数、题量或更换运算。')
  }return items
+}
+export function variantMatches(original,q){
+ const shape=tree=>typeof tree==='number'?'□':[tree[0],shape(tree[1]),shape(tree[2])]
+ const digits=q=>q.cards.map(c=>c.value).sort((a,b)=>a-b).join()
+ return JSON.stringify(shape(q.tree))===JSON.stringify(shape(original.tree))&&
+  q.features.slice().sort().join()===original.features.slice().sort().join()&&digits(q)!==digits(original)
+}
+export function spacedVariant(c,seed,original,previous=null){
+ const pattern=tree=>typeof tree==='number'?[]:[...pattern(tree[1]),tree[0]]
+ const ops=pattern(original.tree)
+ for(let i=0;i<16;i++){
+  const [q]=generate(c,seed+Math.imul(i,2654435761),[original.key],ops,original.features)
+  if(variantMatches(original,q)&&(!previous||q.key!==previous.key||i>=8))return q
+ }
+ throw Error('这次没找到同结构的新题，可以稍后再试。')
 }
 export function median(xs){if(!xs.length)return null;const a=xs.slice().sort((a,b)=>a-b),m=a.length>>1;return a.length%2?a[m]:(a[m-1]+a[m])/2}
 export function summary(s){const rows=s.rows.filter(x=>x.first),correct=rows.filter(x=>x.first.n===x.q.answer)

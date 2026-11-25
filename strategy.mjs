@@ -1,3 +1,4 @@
+import {reviewDay} from './review.mjs'
 import {value,tokens} from './engine.mjs'
 
 export const catalog={
@@ -62,6 +63,8 @@ export function finishedOperation(l){
 }
 export function validateLesson(l){
  const ok=Object.hasOwn(catalog,l.skill)&&l.version===1&&typeof l.id==='string'&&/^[a-zA-Z0-9-]{1,64}$/.test(l.id)&&Number.isInteger(l.seed)&&l.seed>=0&&l.seed<=4294967295
+ if(l.startedAt!==undefined&&(!Number.isSafeInteger(l.startedAt)||l.startedAt<0||l.startedAt>=8640000000000000))return false
+ if(l.completedAt!==undefined&&(l.advanced!==3||!Number.isSafeInteger(l.completedAt)||l.completedAt<0||l.completedAt>=8640000000000000))return false
  if(!ok||(l.studied!==undefined&&typeof l.studied!=='boolean')||!Array.isArray(l.questions)||l.questions.length!==3||!l.questions.every((q,i)=>JSON.stringify(q)===JSON.stringify(problem(l.skill,l.seed+i))))return false
  if(!Array.isArray(l.answers)||l.answers.length>3||!l.answers.every(n=>Number.isSafeInteger(n)&&n>=0&&n<=9999999)||!Number.isInteger(l.advanced)||l.advanced<0||l.advanced>l.answers.length||l.answers.length>l.advanced+1)return false
  if(!Array.isArray(l.variantSteps)||l.variantSteps.length!==2)return false
@@ -82,4 +85,17 @@ export function progress(lessons,skill){
  const correct=answers.filter(Boolean).length
  const mastered=answers.length>=20&&correct/answers.length>=.9&&rounds.filter(l=>l.answers.length).length>=2&&rounds.some(l=>l.variantSteps.some((steps,i)=>finishedOperation({...l,steps})&&l.answers[i+1]===value(l.questions[i+1])))&&rounds.some(l=>l.answers.length>1)
  return {count:answers.length,correct,state:mastered?'已掌握':answers.length?'练习中':rounds.some(l=>l.studied)?'已学习':'未探索'}
+}
+export function lessonReview(lessons,skill,now=Date.now()){
+ const finished=lessons.filter(l=>l.skill===skill&&l.completedAt!==undefined).sort((a,b)=>a.completedAt-b.completedAt)
+ let due=null,stage=0
+ for(const l of finished){
+  const day=reviewDay(l.completedAt)
+  if(due===null){due=day+1;continue}
+  if(day<due||l.startedAt===undefined||reviewDay(l.startedAt)<due)continue
+  const correct=l.answers.slice(1).every((a,i)=>a===value(l.questions[i+1]))
+  stage=correct?Math.min(stage+1,2):0
+  due=day+[1,3,7][stage]
+ }
+ return due===null?null:{due,stage,ready:reviewDay(now)>=due}
 }

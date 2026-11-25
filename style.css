@@ -19,3 +19,11 @@
 .treasure-mini .treasure-value{font-size:21px}
 .treasure-mini .treasure-mark{font-size:10px;top:2px;left:3px}
 @media(max-width:540px){.puzzle-cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.puzzle-cards button{height:78px}}
+.challenge-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.challenge-actions [aria-pressed=true]{background:#24543d;color:white}.game-target .icon{background:#fae9bc}.game-sprint .icon{background:#e5e1ef}
+[data-theme=classic]{--face:#fffdf2;--edge:#c7cebb;--grain:none}
+[data-theme=stars]{--face:#f1effa;--edge:#887ca3;--grain:radial-gradient(ellipse at 8% 88%,#d6d0ea 0 4%,transparent 5%)}
+[data-theme=forest]{--face:#edf6eb;--edge:#76957a;--grain:linear-gradient(45deg,#cfe5ce 8%,transparent 8%)}
+[data-theme=ocean]{--face:#eaf6fb;--edge:#7090a1;--grain:radial-gradient(ellipse at 50% 130%,#c5e6f0 0 26%,transparent 27%)}
+[data-theme=dino]{--face:#fff2df;--edge:#a58058;--grain:repeating-linear-gradient(125deg,#efd8b8 0 3px,transparent 3px 8px)}
+.card,.puzzle-cards button:not([aria-pressed=true]),.treasure-mini,#operands button[data-index]:not([aria-pressed=true]){background-color:var(--face);border-color:var(--edge);background-image:var(--grain);background-size:100% 12%;background-position:bottom;background-repeat:no-repeat}
+.theme-preview h2{margin-bottom:0}.journey-stage .btn{display:grid;gap:2px;text-align:left}.journey-stage small{font-weight:400;color:#465e52}
