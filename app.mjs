@@ -32,7 +32,18 @@ const button=(id,t,cls='')=>'<button id="'+id+'" class="'+cls+'">'+t+'</button>'
 const seconds=n=>n==null?'暂无数据':(n/1000).toFixed(1)+' 秒',rate=(a,b)=>b?Math.round(100*a/b)+'%':'暂无数据'
 function clear(){clearTimeout(alarm);clearInterval(ticker)}
 function card(n,i=0,classic=true){const s=['♠','♥','♣','♦'][i%4],face=classic?({1:'A',11:'J',12:'Q',13:'K'}[n]||n):n;return '<span class="card '+(classic&&i%2?'red':'')+'" aria-label="'+n+'"><small>'+ (classic?s:'')+'</small>'+face+'<i>'+(classic?(db.prefs.faces?n:s):'')+'</i></span>'}
-function tiles(){return '<div class="grid">'+Object.entries(name).map(([m,t],i)=>link('/games/'+m+'/setup','<span class="icon">'+(i?'ϟ':'♧')+'</span><h3>'+t+'</h3><p>'+(i?'记住依次出现的牌，算出最后的数。':'翻开整组卡牌，找出算式的答案。')+'</p>','tile')).join('')+link('/games/strategy/setup','<h3>巧算大师</h3><p>动手凑整、拆分，再挑战变式。</p>','tile')+link('/games/treasure/setup','<h3>数字寻宝</h3><p>选几张牌，凑出目标数。</p>','tile')+link('/games/mystery/setup','<h3>神秘数字</h3><p>找出让等式成立的数。</p>','tile')+'</div>'}
+const gameCards=[
+ ['classic',name.classic,'♧','翻开整组卡牌，找出算式的答案。'],
+ ['flash',name.flash,'ϟ','记住依次出现的牌，算出最后的数。'],
+ ['strategy','巧算大师','±','动手凑整、拆分，再挑战变式。'],
+ ['treasure','数字寻宝','◇','选几张牌，凑出目标数。'],
+ ['mystery','神秘数字','?','找出让等式成立的数。']
+]
+function tiles(){
+ const cards=gameCards.map(([mode,title,icon,description])=>
+  link('/games/'+mode+'/setup','<span class="icon" aria-hidden="true">'+icon+'</span><div><h3>'+title+'</h3><p>'+description+'</p></div>','tile game-tile game-'+mode))
+ return '<div class="grid">'+cards.join('')+'</div>'
+}
 function home(){const live=db.sessions.findLast(s=>s.status==='live'),rec=recommendation(db,'classic');app.innerHTML='<div class="hero"><div><div class="eyebrow">♧　今日练习</div><h1>翻牌，练心算。</h1><p>经典翻牌 · '+rec.c.count+' 张牌 · 10 道题</p>'+link(live?'/play/'+live.id:'/games/classic/setup',live?'继续上次训练':'开始今日挑战')+'</div><div class="deck" aria-hidden="true">'+[1,7,13].map((n,i)=>card(n,i)).join('')+'</div></div><section><h2>自由游戏</h2>'+tiles()+'</section><section class="panel"><div class="row"><h2>我的练习手记</h2>'+link('/parent','家长中心')+'</div><p>'+ (db.sessions.length?'已完成 '+db.sessions.filter(x=>x.status==='done').length+' 轮 · 合格速度纪录 '+records(db.sessions).size+' 项':'完成第一轮练习后，这里会留下你的训练记录。')+'</p>'+link('/review','错题复习')+' '+link('/achievements','我的成就')+'</section>'+(!db.introduced?'<section>'+link('/onboarding','初次设置与起点短测')+'</section>':'')}
 function field(id,label,options,v){return '<label class="field">'+label+'<select id="'+id+'">'+options.map(([k,t])=>'<option value="'+k+'" '+(String(k)===String(v)?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'}
 const nums=a=>a.map(n=>[n,n]),allowed=m=>Object.entries(kind).filter(([k])=>(db.prefs.learn==='mixed'||k==='add'||k===db.prefs.learn||k==='sub'&&['mul','div'].includes(db.prefs.learn))&&(m!=='flash'||['sub','add'].includes(k)))
