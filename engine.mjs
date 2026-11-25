@@ -20,8 +20,26 @@ export function features(t){
  if(op==='+'||op==='-'){let x=a,y=b,carry=0;while(x||y){const digit=x%10,other=y%10;carry=op==='+'?Number(digit+other+carry>=10):Number(digit-other-carry<0);if(carry)tags.push(op==='+'?'add.carry':'sub.borrow');x=Math.floor(x/10);y=Math.floor(y/10)}}
  return [...new Set(tags)]
 }
+export function validConfig(c){
+ return !!c && !(!['classic','flash'].includes(c.mode)||!Object.hasOwn(skills,c.kind)||![10,13,99,999].includes(c.range)||!Number.isInteger(c.count)||c.count<2||c.count>10||![5,6,10,15,20].includes(c.length)||![500,1000,1500,2000,3000].includes(c.speed)||![0,200,500].includes(c.gap)||c.mode==='flash'&&!['add','sub'].includes(c.kind))
+}
+export const games=Object.freeze(Object.fromEntries(
+ [['classic','经典翻牌'],['flash','闪电心算']].map(([mode,title])=>[mode,Object.freeze({
+  mode,title,
+  validateConfig: config=>config?.mode===mode && validConfig(config),
+  generate(config,...args){
+   if(config.mode!==mode)throw Error('游戏模式不匹配')
+   return generate(config,...args)
+  },
+  validate(question,answer){
+   if(answer?.kind!=='numeric'||typeof answer.value!=='string'||!/^\d{1,7}$/.test(answer.value))return {valid:false}
+   return {valid:true,correct:Number(answer.value)===question.answer}
+  },
+  explain
+ })])
+))
 export function generate(c,seed,exclude=[],pattern=null){
- if(!['classic','flash'].includes(c.mode)||!Object.hasOwn(skills,c.kind)||![10,13,99,999].includes(c.range)||!Number.isInteger(c.count)||c.count<2||c.count>10||![5,6,10,15,20].includes(c.length)||![500,1000,1500,2000,3000].includes(c.speed)||![0,200,500].includes(c.gap)||c.mode==='flash'&&!['add','sub'].includes(c.kind))throw Error('设置组合不可用')
+ if(!validConfig(c))throw Error('设置组合不可用')
  const r=rng(seed),lo=c.range===999?100:c.range===99?10:1,pick=(a,b)=>a+Math.floor(r()*(b-a+1))
  const used=new Set(exclude),items=[]
  for(let i=0;i<c.length;i++){

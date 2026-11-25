@@ -1,18 +1,29 @@
-import {defaults,value,tokens,features,skills,summary,median} from './engine.mjs'
+import {validatePuzzle} from './puzzles.mjs'
+import {validateLesson} from './strategy.mjs'
+import {defaults,value,tokens,features,skills,validConfig,summary,median} from './engine.mjs'
 export const prefs={learn:'add',sound:false,motion:true,timer:true,auto:true,minutes:10,faces:false,start:2}
-export const fresh=()=>({schemaVersion:1,profile:crypto.randomUUID(),prefs:{...prefs},introduced:false,sessions:[]})
+export const fresh=()=>({schemaVersion:2,profile:crypto.randomUUID(),prefs:{...prefs},introduced:false,sessions:[]})
 const id=x=>typeof x==='string'&&/^[a-zA-Z0-9-]{1,64}$/.test(x)
 const finite=x=>Number.isFinite(x)&&x>=0
 function check(ok){if(!ok)throw Error('备份格式、版本或记录内容无效。')}
-export function validate(d){
- check(d.schemaVersion===1&&id(d.profile)&&typeof d.introduced==='boolean'&&Array.isArray(d.sessions))
+function validateVersion(d,version){
+ check(d.schemaVersion===version&&id(d.profile)&&typeof d.introduced==='boolean'&&Array.isArray(d.sessions))
+ if(d.puzzles!==undefined){
+  check(version===2&&Array.isArray(d.puzzles))
+  const ids=new Set()
+  for(const round of d.puzzles){check(validatePuzzle(round)&&!ids.has(round.id));ids.add(round.id)}
+ }
+ if(d.lessons!==undefined){
+  check(version===2&&Array.isArray(d.lessons))
+  const ids=new Set()
+  for(const lesson of d.lessons){check(validateLesson(lesson)&&!ids.has(lesson.id));ids.add(lesson.id)}
+ }
  const p=d.prefs;check(['add','sub','mul','div','mixed'].includes(p.learn)&&[2,4,6].includes(p.start)&&[5,10,15,20].includes(p.minutes))
  for(const k of ['sound','motion','timer','auto','faces'])check(typeof p[k]==='boolean')
  const ids=new Set()
  for(const s of d.sessions){
  check(id(s.id)&&!ids.has(s.id)&&finite(s.at)&&s.at<8640000000000000&&Number.isInteger(s.seed)&&['live','done','ended'].includes(s.status)&&['normal','test','review'].includes(s.type))
- ids.add(s.id);const c=s.c;check([10,13,99,999].includes(c.range)&&['flash','classic'].includes(c.mode)&&Object.hasOwn(skills,c.kind)&&Number.isInteger(c.count)&&c.count>=2&&c.count<=10&&[5,6,10,15,20].includes(c.length)&&[500,1000,1500,2000,3000].includes(c.speed)&&[0,200,500].includes(c.gap))
- check(c.mode!=='flash'||['add','sub'].includes(c.kind));check(Array.isArray(s.rows)&&s.rows.length===c.length&&Number.isInteger(s.i)&&s.i>=0&&s.i<s.rows.length)
+ ids.add(s.id);const c=s.c;check(validConfig(c));check(Array.isArray(s.rows)&&s.rows.length===c.length&&Number.isInteger(s.i)&&s.i>=0&&s.i<s.rows.length)
  for(const [index,r] of s.rows.entries()){const q=r.q;function safe(t,depth){check(depth<=12);if(typeof t!=='number'){check(Array.isArray(t)&&t.length===3&&['+','-','*','/'].includes(t[0]));safe(t[1],depth+1);safe(t[2],depth+1)}}safe(q.tree,0)
  check(value(q.tree)===q.answer&&tokens(q.tree).filter(Number.isInteger).length===c.count&&q.version===1&&[...Object.values(skills),'sense.place','memory.accumulate'].includes(q.skill)&&typeof q.key==='string')
  const parts=tokens(q.tree),numbers=parts.filter(Number.isInteger),lo=c.range===999?100:c.range===99?10:1
@@ -31,12 +42,43 @@ export function validate(d){
  }}
  return d
 }
+export const validate=d=>validateVersion(d,2)
+export function migrate(data){
+ if(data.schemaVersion===2)return validate(data)
+ validateVersion(data,1)
+ return validate({...structuredClone(data),schemaVersion:2})
+}
+// 作答证据引用快照中的题目位置，不重复持久化可以从原始事实重建的数据。
+export function firstAnswerEvidence(session,rowIndex){
+ const row=session.rows[rowIndex],attempt=row.first
+ if(!attempt)return null
+ return {sessionId:session.id,rowIndex,attemptIndex:0,skill:row.q.skill,
+  correct:attempt.n===row.q.answer,hintUsed:attempt.hintUsed??null,
+  input:attempt.input,strategy:null}
+}
 export function merge(current,incoming){
- validate(incoming)
- if(current.profile!==incoming.profile&&current.sessions.length)throw Error('这份备份属于另一个档案，请先导出现有档案。')
+ incoming=migrate(incoming)
+ if(current.profile!==incoming.profile&&(current.sessions.length||current.lessons?.length||current.puzzles?.length))throw Error('这份备份属于另一个档案，请先导出现有档案。')
  const sessions=new Map(current.sessions.map(s=>[s.id,s]))
  for(const s of incoming.sessions){if(sessions.has(s.id)&&JSON.stringify(sessions.get(s.id))!==JSON.stringify(s))throw Error('同一轮训练有不同内容，已保留当前记录。');sessions.set(s.id,s)}
- return validate({...incoming,sessions:[...sessions.values()]})
+ const merged={...incoming,sessions:[...sessions.values()]}
+ if(current.lessons||incoming.lessons){
+  const lessons=new Map((current.lessons??[]).map(l=>[l.id,l]))
+  for(const l of incoming.lessons??[]){
+   if(lessons.has(l.id)&&JSON.stringify(lessons.get(l.id))!==JSON.stringify(l))throw Error('同一节巧算练习有不同记录。')
+   lessons.set(l.id,l)
+  }
+  merged.lessons=[...lessons.values()]
+ }
+ if(current.puzzles||incoming.puzzles){
+  const puzzles=new Map((current.puzzles??[]).map(r=>[r.id,r]))
+  for(const r of incoming.puzzles??[]){
+   if(puzzles.has(r.id)&&JSON.stringify(puzzles.get(r.id))!==JSON.stringify(r))throw Error('同一题探索练习有不同记录。')
+   puzzles.set(r.id,r)
+  }
+  merged.puzzles=[...puzzles.values()]
+ }
+ return validate(merged)
 }
 export const comparison=(s,r)=>JSON.stringify([s.c.mode,r.q.skill,s.c.kind,s.c.range,s.c.count,s.c.mode==='flash'?[s.c.speed,s.c.gap]:null,r.first.input,1])
 export function records(sessions){const out=new Map();for(const s of sessions.filter(x=>x.status==='done')){const st=summary(s);if(st.answered<10||st.correct/st.answered<.9)continue
